@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.log
+
+# Derived embedding caches live alongside each repo-memory and are rebuildable.
+.index/

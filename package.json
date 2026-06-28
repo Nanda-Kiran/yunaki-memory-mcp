@@ -6,12 +6,25 @@
   "bin": {
     "yunaki-memory-mcp": "dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsc -w",
     "start": "node dist/index.js",
-    "smoke": "node test/smoke.mjs"
+    "smoke": "node test/smoke.mjs",
+    "prepare": "tsc",
+    "prepublishOnly": "npm run build"
   },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Nanda-Kiran/yunaki-memory-mcp.git"
+  },
+  "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",
     "gray-matter": "^4.0.3",

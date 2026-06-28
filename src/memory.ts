@@ -13,6 +13,16 @@ export interface WriteArgs {
   source?: string;
 }
 
+/** Lower-level write: explicit slug + optional overwrite, no index/commit (caller batches those). */
+export interface PutArgs {
+  content: string;
+  type: string;
+  tags?: string[];
+  source?: string;
+  slug?: string;
+  overwrite?: boolean;
+}
+
 export interface MemoryRecord {
   id: string;
   type: string;
@@ -43,7 +53,7 @@ function slugify(s: string): string {
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-+|-+$/g, "")
-      .slice(0, 60) || "memory"
+      .slice(0, 80) || "memory"
   );
 }
 
@@ -92,20 +102,33 @@ export function updateIndex(mem: RepoMemory): void {
   );
 }
 
-/** Create a memory file, refresh the index, and commit — all in the repo's memory git. */
-export async function writeMemory(mem: RepoMemory, args: WriteArgs): Promise<WriteResult> {
-  const type = (args.type ?? "fact") as string;
-  const baseTitle = args.title ?? args.content.split("\n")[0];
-  let slug = slugify(baseTitle);
-
+/** Write a single memory file. Does not touch the index or commit. */
+export function putMemoryFile(mem: RepoMemory, args: PutArgs): WriteResult {
+  const type = args.type;
   const typeDir = path.join(mem.dir, type);
   fs.mkdirSync(typeDir, { recursive: true });
 
+  let slug = slugify(args.slug ?? args.content.split("\n")[0]);
   let file = path.join(typeDir, `${slug}.md`);
+
+  let created = today();
+  let usage = 0;
+  let confidence = 0.5;
+
   if (fs.existsSync(file)) {
-    // Real dedup/merge is memory_reinforce's job; here we just avoid clobbering.
-    slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
-    file = path.join(typeDir, `${slug}.md`);
+    if (args.overwrite) {
+      try {
+        const prev = matter(fs.readFileSync(file, "utf8")).data as Record<string, unknown>;
+        if (typeof prev.created === "string") created = prev.created;
+        if (typeof prev.usage_count === "number") usage = prev.usage_count;
+        if (typeof prev.confidence === "number") confidence = prev.confidence;
+      } catch {
+        /* fall through with defaults */
+      }
+    } else {
+      slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
+      file = path.join(typeDir, `${slug}.md`);
+    }
   }
 
   const now = today();
@@ -113,20 +136,31 @@ export async function writeMemory(mem: RepoMemory, args: WriteArgs): Promise<Wri
     id: slug,
     type,
     tags: args.tags ?? [],
-    confidence: 0.5,
-    usage_count: 0,
+    confidence,
+    usage_count: usage,
     last_used: now,
     status: "active",
     source: args.source ?? "",
-    created: now,
+    created,
     updated: now,
   };
 
   fs.writeFileSync(file, matter.stringify(args.content.trim() + "\n", frontmatter));
-  updateIndex(mem);
-  await commitAll(mem.dir, `memory: add ${type}/${slug}`);
-
   return { id: slug, type, relPath: path.relative(mem.dir, file) };
+}
+
+/** Create a memory, refresh the index, and commit — the high-level single-write path. */
+export async function writeMemory(mem: RepoMemory, args: WriteArgs): Promise<WriteResult> {
+  const res = putMemoryFile(mem, {
+    content: args.content,
+    type: (args.type ?? "fact") as string,
+    tags: args.tags,
+    source: args.source,
+    slug: args.title,
+  });
+  updateIndex(mem);
+  await commitAll(mem.dir, `memory: add ${res.type}/${res.id}`);
+  return res;
 }
 
 /** Keyword score blended with confidence. Embedding rerank is a later upgrade. */

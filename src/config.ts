@@ -8,11 +8,19 @@ export const MEM_ROOT =
 /** Repo the server resolves against when a tool call omits repoPath. */
 export const DEFAULT_CWD = process.env.YUNAKI_REPO ?? process.cwd();
 
-export type MemoryType = "fact" | "heuristic" | "failure" | "success" | "preference";
+export type MemoryType =
+  | "fact"
+  | "heuristic"
+  | "failure"
+  | "success"
+  | "preference"
+  | "reference";
+
 export const MEMORY_TYPES: MemoryType[] = [
   "fact",
   "heuristic",
   "failure",
   "success",
   "preference",
+  "reference",
 ];
